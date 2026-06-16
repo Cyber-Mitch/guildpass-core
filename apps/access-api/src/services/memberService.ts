@@ -1,6 +1,32 @@
-import { PrismaClient } from '@prisma/client';
-import { AccessCheckInput, AccessDecision, RoleContext } from '@guildpass/shared-types';
 import { evaluate } from '@guildpass/policy-engine';
+import { AccessCheckInput, AccessDecision, MembershipState, RoleContext } from '@guildpass/shared-types';
+import { PrismaClient } from '@prisma/client';
+
+/**
+ * Normalizes membership state by checking expiry at read time.
+ * Returns 'expired' if the membership has a past expiresAt value,
+ * otherwise returns the original state.
+ */
+function getNormalizedMembershipState(
+  state: MembershipState | undefined | null,
+  expiresAt: Date | null | undefined,
+  now: Date = new Date()
+): MembershipState {
+  const normalizedState = (state || 'invited') as MembershipState;
+  
+  // If there's no expiresAt, use the stored state as-is
+  if (!expiresAt) {
+    return normalizedState;
+  }
+  
+  // If expiresAt is in the past, treat as expired
+  if (expiresAt < now) {
+    return 'expired';
+  }
+  
+  // Otherwise use the stored state
+  return normalizedState;
+}
 
 export function getMemberService(prisma: PrismaClient) {
   return {
@@ -13,7 +39,7 @@ export function getMemberService(prisma: PrismaClient) {
       });
       const communities = members.map(m => ({
         communityId: m.communityId,
-        state: m.membership?.state || 'invited',
+        state: getNormalizedMembershipState(m.membership?.state, m.membership?.expiresAt),
         expiresAt: m.membership?.expiresAt?.toISOString() ?? null
       }));
       return { wallet, communities };
@@ -35,7 +61,7 @@ export function getMemberService(prisma: PrismaClient) {
           bio: m.profile?.bio ?? ''
         },
         membership: {
-          state: m.membership?.state ?? 'invited',
+          state: getNormalizedMembershipState(m.membership?.state, m.membership?.expiresAt),
           expiresAt: m.membership?.expiresAt?.toISOString() ?? null
         },
         roles: m.roles.filter(r => r.active).map(r => r.role)
@@ -70,9 +96,10 @@ export function getMemberService(prisma: PrismaClient) {
         where: { communityId: input.communityId, resource: input.resource }
       });
       const rule = policy ? policy.rule : 'MEMBERS_ONLY';
+      const normalizedState = getNormalizedMembershipState(member.membership?.state, member.membership?.expiresAt);
       const ctx: RoleContext = {
         assignments: member.roles.map(r => ({ role: r.role as any, source: r.source as any, active: r.active })),
-        membershipState: (member.membership?.state as any) ?? 'invited'
+        membershipState: normalizedState
       };
       const decision = evaluate({
         id: policy?.id ?? 'default',
@@ -94,7 +121,7 @@ export function getMemberService(prisma: PrismaClient) {
           return {
             wallet: m.wallet.address,
             displayName: m.profile?.displayName ?? null,
-            state: m.membership?.state ?? 'invited',
+            state: getNormalizedMembershipState(m.membership?.state, m.membership?.expiresAt),
             roles: activeRoles
           };
         })
