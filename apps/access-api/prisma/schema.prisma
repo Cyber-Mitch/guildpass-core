@@ -1,99 +1,37 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Community {
-  id        String   @id
-  name      String
-  members   Member[]
-  policies  AccessPolicy[]
-  createdAt DateTime @default(now())
+generator client {
+  provider = "prisma-client-js"
 }
 
-model Wallet {
-  id        String   @id @default(cuid())
-  address   String   @unique
-  members   Member[]
-  createdAt DateTime @default(now())
+// --- existing models above (User, Wallet, Community, Member, Policy, etc.) ---
+
+enum EventType {
+  ACCESS_CHECK
+  MEMBERSHIP_CREATED
+  MEMBERSHIP_UPDATED
+  MEMBERSHIP_DELETED
+  POLICY_EVALUATION
+  OTHER
 }
 
-model Profile {
-  id          String   @id @default(cuid())
-  displayName String
-  bio         String?
-  members     Member[]
-}
+model AuditEvent {
+  id          String   @id @default(uuid())
+  eventType   EventType
+  walletId    String?  // optional: some events may not have a wallet
+  communityId String?  // optional
+  resource    String?
+  policyRule  String?
+  decision    String?  // e.g. "ALLOW", "DENY"
+  reasonCode  String?  // machine-readable code for decision
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime @default(now())
 
-model Member {
-  id          String   @id @default(cuid())
-  communityId String
-  walletId    String
-  profileId   String?
-  community   Community @relation(fields: [communityId], references: [id])
-  wallet      Wallet    @relation(fields: [walletId], references: [id])
-  profile     Profile?  @relation(fields: [profileId], references: [id])
-  membership  Membership?
-  roles       RoleAssignment[]
-  badges      Badge[]
-  @@unique([communityId, walletId])
-}
-
-enum MembershipState {
-  invited
-  active
-  expired
-  suspended
-}
-
-model Membership {
-  id         String          @id @default(cuid())
-  memberId   String          @unique
-  tokenId    Int?            @unique
-  state      MembershipState
-  expiresAt  DateTime?
-  renewedAt  DateTime?
-  createdAt  DateTime        @default(now())
-  member     Member          @relation(fields: [memberId], references: [id])
-}
-
-enum Role {
-  admin
-  member
-  contributor
-}
-
-enum RoleSource {
-  manual
-  auto
-}
-
-model RoleAssignment {
-  id        String     @id @default(cuid())
-  memberId  String
-  role      Role
-  source    RoleSource
-  active    Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  member    Member     @relation(fields: [memberId], references: [id])
-}
-
-model AccessPolicy {
-  id          String   @id @default(cuid())
-  communityId String
-  resource    String
-  rule        String
-  community   Community @relation(fields: [communityId], references: [id])
-  @@unique([communityId, resource])
-}
-
-model Badge {
-  id        String   @id @default(cuid())
-  memberId  String
-  name      String
-  member    Member   @relation(fields: [memberId], references: [id])
+  @@index([walletId])
+  @@index([communityId])
+  @@index([createdAt])
 }
