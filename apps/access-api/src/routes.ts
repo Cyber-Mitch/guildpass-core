@@ -1,108 +1,53 @@
-import express from "express";
-import { PrismaClient } from "@prisma/client";
-import { logEvent } from "./services/auditService";
+import type { FastifyInstance } from 'fastify';
+import { getMemberService } from './services/memberService';
+import { getPrisma } from './services/prisma';
 
-const prisma = new PrismaClient();
-const router = express.Router();
+/**
+ * Register all business routes on the Fastify instance.
+ * Uses app.inject() friendly routes — no network binding required for tests.
+ */
+export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  const prisma = getPrisma();
+  const memberService = getMemberService(prisma);
 
-// Example: create membership
-router.post("/members", async (req, res) => {
-  const { walletId, communityId, role } = req.body;
-  try {
-    const before = null;
-    const created = await prisma.member.create({
-      data: { walletId, communityId, role },
-    });
+  // GET /v1/memberships/:wallet — list membership communities for a wallet
+  app.get('/v1/memberships/:wallet', async (request, reply) => {
+    const { wallet } = request.params as { wallet: string };
+    const result = await memberService.getMembershipsByWallet(wallet);
+    return result;
+  });
 
-    // Audit log
-    try {
-      await logEvent({
-        eventType: "MEMBERSHIP_CREATED",
-        walletId,
-        communityId,
-        resource: "member",
-        policyRule: null,
-        decision: "CREATED",
-        reasonCode: null,
-        beforeState: before,
-        afterState: created,
-      });
-    } catch (err) {
-      console.error("Failed to log membership created event:", err);
+  // GET /v1/members/:wallet — get member profile
+  app.get('/v1/members/:wallet', async (request, reply) => {
+    const { wallet } = request.params as { wallet: string };
+    const result = await memberService.getProfileByWallet(wallet);
+    if (!result) {
+      return reply.status(404).send({ error: 'Member not found' });
     }
+    return result;
+  });
 
-    res.status(201).json(created);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to create member" });
-  }
-});
-
-// Example: update membership
-router.put("/members/:id", async (req, res) => {
-  const id = req.params.id;
-  const updates = req.body;
-  try {
-    const before = await prisma.member.findUnique({ where: { id } });
-    if (!before) return res.status(404).json({ error: "Member not found" });
-
-    const updated = await prisma.member.update({
-      where: { id },
-      data: updates,
-    });
-
-    // Audit log
-    try {
-      await logEvent({
-        eventType: "MEMBERSHIP_UPDATED",
-        walletId: updated.walletId ?? null,
-        communityId: updated.communityId ?? null,
-        resource: "member",
-        policyRule: null,
-        decision: "UPDATED",
-        reasonCode: null,
-        beforeState: before,
-        afterState: updated,
+  // POST /v1/access/check — check access for wallet/resource
+  app.post('/v1/access/check', async (request, reply) => {
+    const body = request.body as {
+      wallet: string;
+      communityId: string;
+      resource: string;
+    };
+    if (!body?.wallet || !body?.communityId || !body?.resource) {
+      return reply.status(400).send({
+        error: 'Missing required fields: wallet, communityId, resource',
       });
-    } catch (err) {
-      console.error("Failed to log membership updated event:", err);
     }
+    const result = await memberService.checkAccess(body);
+    return result;
+  });
 
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update member" });
-  }
-});
-
-// Example: delete membership
-router.delete("/members/:id", async (req, res) => {
-  const id = req.params.id;
-  try {
-    const before = await prisma.member.findUnique({ where: { id } });
-    if (!before) return res.status(404).json({ error: "Member not found" });
-
-    await prisma.member.delete({ where: { id } });
-
-    // Audit log
-    try {
-      await logEvent({
-        eventType: "MEMBERSHIP_DELETED",
-        walletId: before.walletId ?? null,
-        communityId: before.communityId ?? null,
-        resource: "member",
-        policyRule: null,
-        decision: "DELETED",
-        reasonCode: null,
-        beforeState: before,
-        afterState: null,
-      });
-    } catch (err) {
-      console.error("Failed to log membership deleted event:", err);
-    }
-
-    res.status(204).send();
-  } catch (err) {
-    res.status(500).json({ error: "Failed to delete member" });
-  }
-});
-
-export default router;
+  // GET /v1/communities/:communityId/members — list members for admin
+  app.get('/v1/communities/:communityId/members', async (request, reply) => {
+    const { communityId } = request.params as { communityId: string };
+    const role = (request.query as { role?: string })?.role;
+    const result = await memberService.listMembersForAdmin(communityId, role);
+    return result;
+  });
+}
