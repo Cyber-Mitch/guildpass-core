@@ -57,6 +57,9 @@ export interface GuildPassClientOptions {
 
   /** Override the global `fetch` (useful in tests and Node <18). */
   fetchImpl?: typeof fetch;
+
+  /** Optional API version constraint to check against response headers. */
+  expectedApiVersion?: string;
 }
 
 /** Maximum characters of a response body retained on a {@link GuildPassApiError}. */
@@ -66,10 +69,12 @@ export class GuildPassClient {
   private readonly baseUrl: string;
   private readonly token: string | undefined;
   private readonly fetchImpl: typeof fetch;
+  private readonly expectedApiVersion: string | undefined;
 
   constructor(opts: GuildPassClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.token = opts.token ?? process.env.GUILDPASS_TOKEN;
+    this.expectedApiVersion = opts.expectedApiVersion;
     this.fetchImpl =
       opts.fetchImpl ??
       (typeof fetch !== 'undefined'
@@ -165,6 +170,15 @@ export class GuildPassClient {
         }`,
         responseBody: '',
       });
+    }
+
+    if (this.expectedApiVersion) {
+      const apiVersion = res.headers.get('x-guildpass-api-version');
+      if (apiVersion && apiVersion !== this.expectedApiVersion) {
+        console.warn(
+          `[GuildPassClient] API version mismatch for ${path}. Expected ${this.expectedApiVersion}, got ${apiVersion}`,
+        );
+      }
     }
 
     if (!res.ok) {

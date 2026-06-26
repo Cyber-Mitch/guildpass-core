@@ -102,10 +102,14 @@ export async function seedDatabase(prisma: PrismaClient) {
       profileId: profileBob.id,
     },
   });
-  // Memberships (idempotent via upsert)
+  // Memberships
   await upsertMembership(prisma, mAlice.id, {
     state: "active",
     expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+  });
+  await upsertMembership(prisma, mBob.id, {
+    state: "expired",
+    expiresAt: new Date(Date.now() - 24 * 3600 * 1000),
   });
   await upsertMembership(prisma, mBob.id, {
     state: "expired",
