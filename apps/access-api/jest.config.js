@@ -1,6 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
-  roots: ['<rootDir>/test'],
+  roots: ['<rootDir>/test', '<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
 
   // Ensure TypeScript files are transformed for Jest.

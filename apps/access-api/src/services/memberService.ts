@@ -252,7 +252,10 @@ export function getMemberService(prismaClient: PrismaClient) {
       });
       const communities = members.map((m) => ({
         communityId: m.communityId,
-        state: m.membership?.state || "invited",
+        state: getNormalizedMembershipState(
+          m.membership?.state || "invited",
+          m.membership?.expiresAt,
+        ),
         expiresAt: m.membership?.expiresAt?.toISOString() ?? null,
       }));
       return { wallet, communities };
@@ -276,7 +279,10 @@ export function getMemberService(prismaClient: PrismaClient) {
           bio: m.profile?.bio ?? "",
         },
         membership: {
-          state: m.membership?.state ?? "invited",
+          state: getNormalizedMembershipState(
+            m.membership?.state ?? "invited",
+            m.membership?.expiresAt,
+          ),
           expiresAt: m.membership?.expiresAt?.toISOString() ?? null,
         },
         roles: m.roles.filter((r) => r.active).map((r) => r.role),
@@ -317,13 +323,17 @@ export function getMemberService(prismaClient: PrismaClient) {
         where: { communityId: input.communityId, resource: input.resource },
       });
       const ruleType = policy ? policy.ruleType : "MEMBERS_ONLY";
+      const effectiveState = getNormalizedMembershipState(
+        member.membership?.state ?? "invited",
+        member.membership?.expiresAt,
+      );
       const ctx: RoleContext = {
         assignments: member.roles.map((r) => ({
           role: r.role as any,
           source: r.source as any,
           active: r.active,
         })),
-        membershipState: (member.membership?.state as any) ?? "invited",
+        membershipState: effectiveState as any,
       };
       const decision = evaluate(
         {
@@ -355,7 +365,10 @@ export function getMemberService(prismaClient: PrismaClient) {
           return {
             wallet: m.wallet.address,
             displayName: m.profile?.displayName ?? null,
-            state: m.membership?.state ?? "invited",
+            state: getNormalizedMembershipState(
+              m.membership?.state ?? "invited",
+              m.membership?.expiresAt,
+            ),
             roles: activeRoles,
           };
         })
