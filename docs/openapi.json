@@ -99,9 +99,17 @@
         }
       }
     },
-    "/v1/memberships/{wallet}": {
+    "/v1/communities/{communityId}/memberships/{wallet}": {
       "get": {
         "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "communityId",
+            "required": true
+          },
           {
             "schema": {
               "type": "string"
@@ -118,9 +126,17 @@
         }
       }
     },
-    "/v1/members/{wallet}": {
+    "/v1/communities/{communityId}/members/{wallet}": {
       "get": {
         "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "communityId",
+            "required": true
+          },
           {
             "schema": {
               "type": "string"

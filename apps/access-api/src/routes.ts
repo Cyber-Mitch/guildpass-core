@@ -10,16 +10,16 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   const prisma = getPrisma();
   const memberService = getMemberService(prisma);
 
-  // GET /v1/memberships/:wallet — list membership communities for a wallet
-  app.get('/v1/memberships/:wallet', async (request, reply) => {
-    const { wallet } = request.params as { wallet: string };
+  // GET /v1/communities/:communityId/memberships/:wallet — list membership communities for a wallet
+  app.get('/v1/communities/:communityId/memberships/:wallet', async (request, reply) => {
+    const { wallet } = request.params as { communityId: string; wallet: string };
     const result = await memberService.getMembershipsByWallet(wallet);
     return result;
   });
 
-  // GET /v1/members/:wallet — get member profile
-  app.get('/v1/members/:wallet', async (request, reply) => {
-    const { wallet } = request.params as { wallet: string };
+  // GET /v1/communities/:communityId/members/:wallet — get member profile
+  app.get('/v1/communities/:communityId/members/:wallet', async (request, reply) => {
+    const { wallet } = request.params as { communityId: string; wallet: string };
     const result = await memberService.getProfileByWallet(wallet);
     if (!result) {
       return reply.status(404).send({ error: 'Member not found' });
