@@ -4,11 +4,12 @@ datasource db {
 }
 
 model Community {
-  id        String   @id
+  id        String         @id
   name      String
   members   Member[]
   policies  AccessPolicy[]
-  createdAt DateTime @default(now())
+  resources Resource[]
+  createdAt DateTime       @default(now())
 }
 
 model Wallet {
@@ -26,16 +27,17 @@ model Profile {
 }
 
 model Member {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   communityId String
   walletId    String
   profileId   String?
-  community   Community @relation(fields: [communityId], references: [id])
-  wallet      Wallet    @relation(fields: [walletId], references: [id])
-  profile     Profile?  @relation(fields: [profileId], references: [id])
+  community   Community        @relation(fields: [communityId], references: [id])
+  wallet      Wallet           @relation(fields: [walletId], references: [id])
+  profile     Profile?         @relation(fields: [profileId], references: [id])
   membership  Membership?
   roles       RoleAssignment[]
   badges      Badge[]
+
   @@unique([communityId, walletId])
 }
 
@@ -47,13 +49,13 @@ enum MembershipState {
 }
 
 model Membership {
-  id         String          @id @default(cuid())
-  memberId   String          @unique
-  state      MembershipState
-  expiresAt  DateTime?
-  renewedAt  DateTime?
-  createdAt  DateTime        @default(now())
-  member     Member          @relation(fields: [memberId], references: [id])
+  id        String          @id @default(cuid())
+  memberId  String          @unique
+  state     MembershipState
+  expiresAt DateTime?
+  renewedAt DateTime?
+  createdAt DateTime        @default(now())
+  member    Member          @relation(fields: [memberId], references: [id])
 
   @@index([state, expiresAt])
 }
@@ -90,16 +92,16 @@ model Badge {
 }
 
 model Resource {
-  id           String   @id @default(cuid())
-  communityId  String
-  resourceId   String
-  name         String
-  metadata     Json?
-  archived     Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  communityId String
+  resourceId  String
+  name        String
+  metadata    Json?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  community    Community @relation(fields: [communityId], references: [id])
+  community Community @relation(fields: [communityId], references: [id])
 
   @@unique([communityId, resourceId])
   @@index([communityId])
@@ -107,12 +109,13 @@ model Resource {
 }
 
 model AccessPolicy {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   communityId String
   resource    String
   ruleType    String
   params      Json?
   community   Community @relation(fields: [communityId], references: [id])
+
   @@unique([communityId, resource])
 }
 
@@ -132,21 +135,51 @@ enum EventType {
   OTHER
 }
 
-
 model AuditEvent {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   eventType   EventType
-  walletId    String?  // optional: some events may not have a wallet
-  communityId String?  // optional
+  walletId    String? // optional: some events may not have a wallet
+  communityId String? // optional
   resource    String?
   policyRule  String?
-  decision    String?  // e.g. "ALLOW", "DENY"
-  reasonCode  String?  // machine-readable code for decision
+  decision    String? // e.g. "ALLOW", "DENY"
+  reasonCode  String? // machine-readable code for decision
   beforeState Json?
   afterState  Json?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([walletId])
   @@index([communityId])
   @@index([createdAt])
+}
+
+// --- Integration Event Outbox ---
+
+enum OutboxEventStatus {
+  pending
+  delivered
+  failed
+}
+
+model OutboxEvent {
+  id          String            @id @default(uuid())
+  eventType   String // e.g. "MEMBERSHIP_CREATED", "ROLE_ASSIGNED", "RESOURCE_CREATED"
+  entityId    String? // ID of the entity that changed (memberId, resourceId, etc.)
+  entityType  String? // e.g. "Member", "RoleAssignment", "Resource", "AccessPolicy"
+  communityId String? // community context
+  payload     Json              @default("{}")
+  status      OutboxEventStatus @default(pending)
+  retryCount  Int               @default(0)
+  maxRetries  Int               @default(5)
+  lastError   String?
+  createdAt   DateTime          @default(now())
+  deliveredAt DateTime?
+  nextRetryAt DateTime?
+
+  @@index([status])
+  @@index([communityId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([nextRetryAt])
+  @@index([status, nextRetryAt])
 }

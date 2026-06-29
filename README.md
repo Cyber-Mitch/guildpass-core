@@ -126,7 +126,58 @@ CI will automatically verify that the OpenAPI specification is up-to-date with y
 
 ## Data Model
 
-Prisma schema includes: `communities`, `wallets`, `members`, `memberships`, `roles`, `access policies`, `profiles`, `badges` (placeholder).
+Prisma schema includes: `communities`, `wallets`, `members`, `memberships`, `roles`, `access policies`, `profiles`, `badges` (placeholder), `audit_events`, and `outbox_events`.
+
+---
+
+## Integration Event Outbox
+
+The API uses the **transactional outbox pattern** to emit reliable integration events when domain state changes. Every mutation that affects memberships, roles, policies, resources, or access decisions writes a durable event to the `OutboxEvent` table within the same database transaction as the state change. This guarantees that no event is lost on request failure or process restart.
+
+### Outbox Processing Contract
+
+| Concept | Description |
+| ------- | ----------- |
+| **Event creation** | Events are written atomically with the domain mutation inside a Prisma `$transaction`. If the mutation fails, no event is created. If the event write fails, the entire transaction rolls back. |
+| **Event types** | `MEMBERSHIP_CREATED`, `MEMBERSHIP_UPDATED`, `MEMBERSHIP_DELETED`, `ROLE_ASSIGNED`, `ROLE_REMOVED`, `RESOURCE_CREATED`, `RESOURCE_UPDATED`, `RESOURCE_ARCHIVED`, `POLICY_CREATED`, `POLICY_UPDATED`, `POLICY_DELETED`, `ACCESS_DECISION` |
+| **Statuses** | `pending` (awaiting delivery), `delivered` (successfully processed), `failed` (permanently failed after max retries) |
+| **Retry strategy** | Exponential backoff: `nextRetryAt = now + 10 × 2^retryCount` seconds. Default max 5 retries. |
+| **Delivery worker** | `outboxWorker` polls for pending events every `OUTBOX_WORKER_INTERVAL_MS` (default 10s) and delegates to a pluggable handler. The default handler is a no-op logger. |
+| **Pruning** | Delivered events older than 7 days are automatically pruned to prevent unbounded table growth. |
+
+### Configuration
+
+| Environment Variable | Default | Description |
+| -------------------- | ------- | ----------- |
+| `OUTBOX_WORKER_INTERVAL_MS` | `10000` | Polling interval for the outbox worker (ms) |
+| `OUTBOX_WORKER_BATCH_SIZE` | `50` | Max events processed per worker pass |
+
+### Pluggable Handler
+
+The outbox worker accepts a custom `OutboxEventHandler` function. Replace the default no-op with your own delivery logic (HTTP webhook, NATS, Kafka, analytics pipeline, etc.):
+
+```typescript
+import { createOutboxWorker, OutboxEventHandler } from './workers/outboxWorker';
+
+const myHandler: OutboxEventHandler = async (event) => {
+  await fetch('https://hooks.example.com/integration', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(event),
+  });
+};
+
+const worker = createOutboxWorker(10_000, myHandler);
+worker.start();
+```
+
+### Observability
+
+| Metric | Type | Labels |
+| ------ | ---- | ------ |
+| `outbox_events_created_total` | Counter | `event_type` |
+| `outbox_events_delivered_total` | Counter | `event_type` |
+| `outbox_events_failed_total` | Counter | `event_type` |
 
 ---
 

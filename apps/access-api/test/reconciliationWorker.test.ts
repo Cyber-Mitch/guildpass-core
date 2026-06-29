@@ -6,18 +6,23 @@ import {
 import * as auditService from "../src/services/auditService";
 
 jest.mock("../src/services/auditService");
+jest.mock("../src/services/outboxService", () => ({
+  logOutboxEventTx: jest.fn().mockResolvedValue({ eventId: "evt-1", status: "pending" }),
+}));
 
 const mockLogEvent = auditService.logEvent as jest.MockedFunction<
   typeof auditService.logEvent
 >;
 
 function makePrisma(memberships: any[]) {
-  return {
+  const prisma: any = {
     membership: {
       findMany: jest.fn().mockResolvedValue(memberships),
       update: jest.fn().mockResolvedValue({}),
     },
-  } as unknown as PrismaClient;
+  };
+  prisma.$transaction = jest.fn(async (fn: any) => fn(prisma));
+  return prisma as unknown as PrismaClient;
 }
 
 const PAST = new Date(Date.now() - 86_400_000);

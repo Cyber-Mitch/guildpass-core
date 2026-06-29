@@ -8,8 +8,13 @@ type AuditEventClient = {
   create: (args: any) => any;
 };
 
+type OutboxEventClient = {
+  create: (args: { data: any }) => any;
+};
+
 type PrismaLikeClient = {
   auditEvent: AuditEventClient;
+  outboxEvent?: OutboxEventClient;
 };
 
 
@@ -45,22 +50,61 @@ export async function logEvent(event: AuditEventInput) {
  *
  * Important: we run this inside the caller's Prisma transaction so audit events
  * cannot cause partial visibility of access-affecting mutations.
+ *
+ * Also emits a durable outbox event for ACCESS_CHECK decisions so downstream
+ * integrations (dashboards, bots, webhooks, analytics) can consume them
+ * reliably.
  */
 export async function logEventTx(db: PrismaLikeClient, event: AuditEventInput) {
-  return db.auditEvent.create({
+  // Create audit event and optionally an outbox event in parallel within
+  // the same transaction for atomicity.
+  const promises: Promise<any>[] = [
+    db.auditEvent.create({
+      data: {
+        eventType: event.eventType,
+        walletId: event.walletId ?? null,
+        communityId: event.communityId ?? null,
+        resource: event.resource ?? null,
+        policyRule: event.policyRule ?? null,
+        decision: event.decision ?? null,
+        reasonCode: event.reasonCode ?? null,
+        beforeState: event.beforeState ?? null,
+        afterState: event.afterState ?? null,
+      },
+    }),
+  ];
 
-    data: {
-      eventType: event.eventType,
-      walletId: event.walletId ?? null,
-      communityId: event.communityId ?? null,
-      resource: event.resource ?? null,
-      policyRule: event.policyRule ?? null,
-      decision: event.decision ?? null,
-      reasonCode: event.reasonCode ?? null,
-      beforeState: event.beforeState ?? null,
-      afterState: event.afterState ?? null,
-    },
-  });
+  // Also emit a durable outbox event for ACCESS_CHECK decisions so
+  // downstream integrations can consume them reliably.
+  if (
+    db.outboxEvent &&
+    event.eventType === "ACCESS_CHECK"
+  ) {
+    promises.push(
+      db.outboxEvent.create({
+        data: {
+          eventType: "ACCESS_DECISION",
+          entityId: event.walletId ?? null,
+          entityType: "AccessDecision",
+          communityId: event.communityId ?? null,
+          payload: {
+            walletId: event.walletId ?? null,
+            resource: event.resource ?? null,
+            policyRule: event.policyRule ?? null,
+            decision: event.decision ?? null,
+            reasonCode: event.reasonCode ?? null,
+          },
+          status: "pending",
+          retryCount: 0,
+          maxRetries: 5,
+          nextRetryAt: new Date(),
+        },
+      }),
+    );
+  }
+
+  const [auditResult] = await Promise.all(promises);
+  return auditResult;
 }
 
 

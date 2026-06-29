@@ -126,4 +126,43 @@ export type EventType =
   | "POLICY_EVALUATION"
   | "OTHER";
 
+// --- Integration Event Outbox ---
+
+export type OutboxEventType =
+  | "MEMBERSHIP_CREATED"
+  | "MEMBERSHIP_UPDATED"
+  | "MEMBERSHIP_DELETED"
+  | "ROLE_ASSIGNED"
+  | "ROLE_REMOVED"
+  | "RESOURCE_CREATED"
+  | "RESOURCE_UPDATED"
+  | "RESOURCE_ARCHIVED"
+  | "POLICY_CREATED"
+  | "POLICY_UPDATED"
+  | "POLICY_DELETED"
+  | "ACCESS_DECISION";
+
+export type OutboxEventStatus = "pending" | "delivered" | "failed";
+
+export interface OutboxEventDto {
+  id?: string;
+  eventType: OutboxEventType;
+  entityId?: string | null;
+  entityType?: string | null;
+  communityId?: string | null;
+  payload?: Record<string, unknown>;
+  status?: OutboxEventStatus;
+  retryCount?: number;
+  maxRetries?: number;
+  lastError?: string | null;
+  createdAt?: string;
+  deliveredAt?: string | null;
+  nextRetryAt?: string | null;
+}
+
+export interface OutboxDispatchResult {
+  eventId: string;
+  status: OutboxEventStatus;
+}
+
 export * from "./apiContract";
