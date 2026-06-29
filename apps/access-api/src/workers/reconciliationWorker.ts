@@ -15,6 +15,7 @@
 import { PrismaClient } from "@prisma/client";
 import { getPrisma } from "../services/prisma";
 import { logEvent } from "../services/auditService";
+import { logOutboxEventTx } from "../services/outboxService";
 
 export interface ReconciliationResult {
   updatedCount: number;
@@ -45,11 +46,28 @@ export async function reconcileMemberships(
 
   for (const membership of stale) {
     try {
-      await prisma.membership.update({
-        where: { id: membership.id },
-        data: { state: "expired" },
+      // Wrap the mutation, outbox event, and audit event in a transaction
+      // so that state change and event are atomically durable.
+      await prisma.$transaction(async (tx: any) => {
+        await tx.membership.update({
+          where: { id: membership.id },
+          data: { state: "expired" },
+        });
+
+        await logOutboxEventTx(tx, {
+          eventType: "MEMBERSHIP_UPDATED",
+          entityId: membership.memberId,
+          entityType: "Member",
+          communityId: membership.member.communityId,
+          payload: {
+            previousState: membership.state,
+            newState: "expired",
+            reasonCode: "EXPIRY_RECONCILIATION",
+          },
+        });
       });
 
+      // Audit log outside the transaction (best-effort, non-blocking)
       await logEvent({
         eventType: "MEMBERSHIP_RECONCILED",
         walletId: membership.member.walletId,

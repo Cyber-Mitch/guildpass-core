@@ -50,6 +50,18 @@ const ConfigSchema = z.object({
     .positive()
     .default(60_000),
 
+  // Outbox worker
+  outboxWorkerIntervalMs: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10_000),
+  outboxWorkerBatchSize: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(50),
+
   // Rate limiting
   rateLimitEnabled: z
     .string()
@@ -70,7 +82,6 @@ const ConfigSchema = z.object({
     .int()
     .positive()
     .default(20),
-  redisUrl: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -86,6 +97,8 @@ function validateConfig(): Config {
     databaseUrl: process.env.DATABASE_URL,
     logLevel: process.env.LOG_LEVEL,
     reconciliationIntervalMs: process.env.RECONCILIATION_INTERVAL_MS,
+    outboxWorkerIntervalMs: process.env.OUTBOX_WORKER_INTERVAL_MS,
+    outboxWorkerBatchSize: process.env.OUTBOX_WORKER_BATCH_SIZE,
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED,
     rateLimitWindowMs: process.env.RATE_LIMIT_WINDOW_MS,
     rateLimitDefaultMax: process.env.RATE_LIMIT_DEFAULT_MAX,

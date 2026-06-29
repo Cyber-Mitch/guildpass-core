@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { logOutboxEventTx } from './outboxService';
 
 
 export class ResourceServiceError extends Error {
@@ -152,46 +153,78 @@ export function getResourceService(prisma: PrismaClient) {
       const nowMetadata = input.metadata ?? null;
 
       if (existing) {
-        await db.resource.update({
-          where: {
-            communityId_resourceId: {
-              communityId: normalizedCommunityId,
-              resourceId: normalizedResourceId,
+        // Wrap update + outbox event in a transaction for atomicity.
+        const result = await db.$transaction(async (tx: any) => {
+          await tx.resource.update({
+            where: {
+              communityId_resourceId: {
+                communityId: normalizedCommunityId,
+                resourceId: normalizedResourceId,
+              },
             },
-          },
-          data: {
-            name,
-            metadata: nowMetadata,
-            archived: false,
-          },
-        });
+            data: {
+              name,
+              metadata: nowMetadata,
+              archived: false,
+            },
+          });
 
-        const updated = await db.resource.findUnique({
-          where: {
-            communityId_resourceId: {
-              communityId: normalizedCommunityId,
-              resourceId: normalizedResourceId,
+          const updated = await tx.resource.findUnique({
+            where: {
+              communityId_resourceId: {
+                communityId: normalizedCommunityId,
+                resourceId: normalizedResourceId,
+              },
             },
-          },
+          });
+
+          await logOutboxEventTx(tx, {
+            eventType: "RESOURCE_UPDATED",
+            entityId: normalizedResourceId,
+            entityType: "Resource",
+            communityId: normalizedCommunityId,
+            payload: {
+              name: updated!.name,
+              metadata: updated!.metadata,
+            },
+          });
+
+          return updated;
         });
 
         return {
           communityId: normalizedCommunityId,
           resourceId: normalizedResourceId,
-          name: updated!.name,
-          metadata: updated!.metadata,
-          archived: updated!.archived,
+          name: result!.name,
+          metadata: result!.metadata,
+          archived: result!.archived,
           created: false,
         };
       }
 
-      const created = await db.resource.create({
-        data: {
+      // Wrap create + outbox event in a transaction for atomicity.
+      const created = await db.$transaction(async (tx: any) => {
+        const resource = await tx.resource.create({
+          data: {
+            communityId: normalizedCommunityId,
+            resourceId: normalizedResourceId,
+            name,
+            metadata: nowMetadata,
+          },
+        });
+
+        await logOutboxEventTx(tx, {
+          eventType: "RESOURCE_CREATED",
+          entityId: normalizedResourceId,
+          entityType: "Resource",
           communityId: normalizedCommunityId,
-          resourceId: normalizedResourceId,
-          name,
-          metadata: nowMetadata,
-        },
+          payload: {
+            name: resource.name,
+            metadata: resource.metadata,
+          },
+        });
+
+        return resource;
       });
 
       return {
@@ -243,17 +276,32 @@ export function getResourceService(prisma: PrismaClient) {
         throw new ResourceServiceError('Invalid name', 400);
       }
 
-      const updated = await db.resource.update({
-        where: {
-          communityId_resourceId: {
-            communityId: normalizedCommunityId,
-            resourceId: normalizedResourceId,
+      const updated = await db.$transaction(async (tx: any) => {
+        const resource = await tx.resource.update({
+          where: {
+            communityId_resourceId: {
+              communityId: normalizedCommunityId,
+              resourceId: normalizedResourceId,
+            },
           },
-        },
-        data: {
-          ...(name != null ? { name } : {}),
-          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-        },
+          data: {
+            ...(name != null ? { name } : {}),
+            ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+          },
+        });
+
+        await logOutboxEventTx(tx, {
+          eventType: "RESOURCE_UPDATED",
+          entityId: normalizedResourceId,
+          entityType: "Resource",
+          communityId: normalizedCommunityId,
+          payload: {
+            name: resource.name,
+            metadata: resource.metadata,
+          },
+        });
+
+        return resource;
       });
 
       return {
@@ -297,14 +345,24 @@ export function getResourceService(prisma: PrismaClient) {
         throw new ResourceServiceError('Resource not found', 404);
       }
 
-      await db.resource.update({
-        where: {
-          communityId_resourceId: {
-            communityId: normalizedCommunityId,
-            resourceId: normalizedResourceId,
+      await db.$transaction(async (tx: any) => {
+        await tx.resource.update({
+          where: {
+            communityId_resourceId: {
+              communityId: normalizedCommunityId,
+              resourceId: normalizedResourceId,
+            },
           },
-        },
-        data: { archived: true },
+          data: { archived: true },
+        });
+
+        await logOutboxEventTx(tx, {
+          eventType: "RESOURCE_ARCHIVED",
+          entityId: normalizedResourceId,
+          entityType: "Resource",
+          communityId: normalizedCommunityId,
+          payload: {},
+        });
       });
 
       return { communityId: normalizedCommunityId, resourceId: normalizedResourceId, archived: true };

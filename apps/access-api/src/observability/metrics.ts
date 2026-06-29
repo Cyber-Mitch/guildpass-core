@@ -89,6 +89,37 @@ const dbQueryDuration = new Histogram({
 });
 
 // --------------------------------------------------------------------------
+// Outbox Metrics
+// --------------------------------------------------------------------------
+
+/**
+ * Tracks outbox event creation per event type.
+ */
+const outboxEventsCreatedTotal = new Counter({
+  name: 'outbox_events_created_total',
+  help: 'Total number of outbox events created by event type',
+  labelNames: ['event_type'] as const,
+  registers: [registry],
+});
+
+/**
+ * Tracks outbox event delivery outcomes.
+ */
+const outboxEventsDeliveredTotal = new Counter({
+  name: 'outbox_events_delivered_total',
+  help: 'Total number of outbox events delivered',
+  labelNames: ['event_type'] as const,
+  registers: [registry],
+});
+
+const outboxEventsFailedTotal = new Counter({
+  name: 'outbox_events_failed_total',
+  help: 'Total number of outbox events permanently failed',
+  labelNames: ['event_type'] as const,
+  registers: [registry],
+});
+
+// --------------------------------------------------------------------------
 // Exported handle
 // --------------------------------------------------------------------------
 
@@ -97,4 +128,7 @@ export const metrics = {
   httpRequestsTotal,
   accessDecisionsTotal,
   dbQueryDuration,
+  outboxEventsCreatedTotal,
+  outboxEventsDeliveredTotal,
+  outboxEventsFailedTotal,
 };

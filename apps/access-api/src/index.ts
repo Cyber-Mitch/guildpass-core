@@ -9,12 +9,21 @@ import { buildApp } from './app';
 import { config } from './config';
 import { disconnectPrisma } from './services/prisma';
 import { createReconciliationWorker } from './workers/reconciliationWorker';
+import { createOutboxWorker } from './workers/outboxWorker';
 
 async function main() {
   const app = await buildApp();
 
   const worker = createReconciliationWorker(config.reconciliationIntervalMs);
   worker.start();
+
+  const outboxWorker = createOutboxWorker(
+    config.outboxWorkerIntervalMs,
+    undefined, // Use default no-op handler; replace for production
+    undefined, // Use default Prisma client
+    config.outboxWorkerBatchSize,
+  );
+  outboxWorker.start();
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
 
@@ -31,6 +40,7 @@ async function main() {
     );
     try {
       worker.stop();
+      outboxWorker.stop();
       await disconnectPrisma();
       console.log('✅ Server and database connections closed cleanly.');
       process.exit(0);
