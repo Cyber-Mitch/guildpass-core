@@ -188,25 +188,31 @@ enum OutboxEventStatus {
 }
 
 model OutboxEvent {
-  id          String            @id @default(uuid())
-  eventType   String // e.g. "MEMBERSHIP_CREATED", "ROLE_ASSIGNED", "RESOURCE_CREATED"
-  entityId    String? // ID of the entity that changed (memberId, resourceId, etc.)
-  entityType  String? // e.g. "Member", "RoleAssignment", "Resource", "AccessPolicy"
-  communityId String? // community context
-  payload     Json              @default("{}")
-  status      OutboxEventStatus @default(pending)
-  retryCount  Int               @default(0)
-  maxRetries  Int               @default(5)
-  lastError   String?
-  createdAt   DateTime          @default(now())
-  deliveredAt DateTime?
-  nextRetryAt DateTime?
+  id            String            @id @default(uuid())
+  eventType     String // e.g. "MEMBERSHIP_CREATED", "ROLE_ASSIGNED", "RESOURCE_CREATED"
+  entityId      String? // ID of the entity that changed (memberId, resourceId, etc.)
+  entityType    String? // e.g. "Member", "RoleAssignment", "Resource", "AccessPolicy"
+  communityId   String? // community context
+  // Groups outbox events emitted by the same originating request/mutation so
+  // consumers can correlate related events (e.g. a role change plus its
+  // downstream access re-evaluation). Nullable additive column — see the
+  // "Simple case" worked example in CONTRIBUTING.md's migration guide.
+  correlationId String?
+  payload       Json              @default("{}")
+  status        OutboxEventStatus @default(pending)
+  retryCount    Int               @default(0)
+  maxRetries    Int               @default(5)
+  lastError     String?
+  createdAt     DateTime          @default(now())
+  deliveredAt   DateTime?
+  nextRetryAt   DateTime?
 
   @@index([status])
   @@index([communityId])
   @@index([eventType])
   @@index([createdAt])
   @@index([nextRetryAt])
+  @@index([correlationId])
   @@index([status, nextRetryAt])
 }
 

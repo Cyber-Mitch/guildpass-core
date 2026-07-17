@@ -231,6 +231,12 @@ pnpm --filter access-api prisma:migrate:check
 
 The CI workflow runs the same validation steps against a disposable PostgreSQL service and a shadow database so drift is caught before merge.
 
+Not every schema change is safe to ship as a single direct migration —
+see [CONTRIBUTING.md > Database Migrations: Direct vs. Expand/Contract](./CONTRIBUTING.md#database-migrations-direct-vs-expandcontract)
+for the decision framework, a worked example, and the reusable
+batched-backfill utility (`apps/access-api/src/services/backfillService.ts`)
+for populating large tables without holding long-running locks.
+
 ### Integration Testing
 
 The **Membership Integration Test** (`apps/access-api/src/membership-integration.test.ts`) validates the complete flow from MembershipNFT contract events to API access decisions:
