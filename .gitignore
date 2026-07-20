@@ -18,3 +18,9 @@ cache
 out
 broadcast
 contracts/script/fixtures/*.determinism-check.out.json
+
+# Excluded files
+AGENTS.md
+update-test.js
+update-test.mjs
+temp/
